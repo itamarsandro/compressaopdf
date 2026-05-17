@@ -2,11 +2,12 @@ from celery import Celery
 from pypdf import PdfReader, PdfWriter
 import os
 
-# Configura a conexão de transporte com o serviço Redis do ecossistema isolado
-REDIS_URL = os.getenv("REDIS_URL", "redis://fila-redis:6379/0")
-app_celery = Celery("tasks", broker=REDIS_URL, backend=REDIS_URL)
+# Configura a conexão apontando para o NOVO serviço redis-pdf na sala 1
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis-pdf:6379/1")
 
-# Força a concorrência em 1 para total estabilidade e proteção de memória RAM do host
+# Nome da fila isolado para não cruzar com as imagens
+app_celery = Celery("tasks_pdf", broker=REDIS_URL, backend=REDIS_URL)
+
 app_celery.conf.worker_concurrency = 1
 
 @app_celery.task
@@ -21,20 +22,20 @@ def processar_pdf(caminho_original):
         reader = PdfReader(caminho_original)
         writer = PdfWriter()
 
-        # Varre as páginas compactando os streams internos de texto, imagens e vetores estruturais
+        # Varre as páginas compactando os streams
         for page in reader.pages:
-            page.compress_content_streams()  # Algoritmo interno de compressão de streams sem perda estrutural
+            page.compress_content_streams()
             writer.add_page(page)
 
-        # Transfere metadados originais se existirem para manter a integridade do documento
+        # Transfere metadados originais
         if reader.metadata:
             writer.add_metadata(reader.metadata)
 
-        # Escreve o novo arquivo PDF compactado no volume compartilhado
+        # Escreve o novo arquivo PDF compactado
         with open(caminho_saida, "wb") as f:
             writer.write(f)
 
-        # Remove IMEDIATAMENTE o PDF original enviado para liberar espaço de armazenamento
+        # Remove o PDF original enviado
         if os.path.exists(caminho_original):
             os.remove(caminho_original)
 
