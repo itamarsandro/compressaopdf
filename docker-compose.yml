@@ -3,7 +3,7 @@ services:
     build: .
     command: uvicorn main:app --host 0.0.0.0 --port 81
     expose:
-      - "80"
+      - "81"
     environment:
       - REDIS_URL=redis://redis-pdf:6379/1
     restart: always
