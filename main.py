@@ -34,10 +34,10 @@ async def forcar_download_e_limpar(filename: str, background_tasks: BackgroundTa
     if not os.path.exists(caminho_completo):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado ou já deletado.")
     
-    # Agenda a exclusão do arquivo para rodar IMEDIATAMENTE após a resposta ser entregue ao cliente
+    # Agenda a exclusão do arquivo
     background_tasks.add_task(deletar_arquivo_servidor, caminho_completo)
     
-    # Retorna o arquivo forçando o download nativo do navegador (Content-Disposition: attachment)
+    # Retorna o arquivo forçando o download
     return FileResponse(
         path=caminho_completo,
         filename=nome_seguro,
@@ -106,7 +106,6 @@ async def pagina_inicial():
                 const downloadContainer = document.getElementById('downloadContainer');
                 const downloadLink = document.getElementById('downloadLink');
                 
-                // Inicializa a UI para estado de progresso
                 statusContainer.classList.remove('hidden');
                 downloadContainer.classList.add('hidden');
                 successCheck.classList.add('hidden');
@@ -117,7 +116,6 @@ async def pagina_inicial():
                 formData.append('arquivo', document.getElementById('arquivo').files[0]);
                 
                 try {
-                    // 1. Envia o arquivo original para o endpoint FastAPI
                     const resposta = await fetch('/upload', { method: 'POST', body: formData });
                     const dados = await resposta.json();
                     
@@ -128,7 +126,6 @@ async def pagina_inicial():
                     const idTarefa = dados.id_tarefa;
                     statusTexto.innerText = "PDF recebido com sucesso! Compactando streams de dados...";
                     
-                    // 2. Inicia o monitoramento periódico da fila do Celery Worker
                     if (checagemIntervalo) clearInterval(checagemIntervalo);
                     
                     checagemIntervalo = setInterval(async () => {
@@ -139,12 +136,10 @@ async def pagina_inicial():
                             clearInterval(checagemIntervalo);
                             
                             if (statusDados.resultado.sucesso) {
-                                // Altera o Spinner pelo ícone estável de Checkmark de Conclusão
                                 spinner.classList.add('hidden');
                                 successCheck.classList.remove('hidden');
                                 statusTexto.innerText = "Sucesso! O tamanho do PDF foi reduzido.";
                                 
-                                // Extrai o nome do arquivo para direcionar para a rota de download forçado
                                 const nomeArquivo = statusDados.resultado.url_download.split('/').pop();
                                 downloadLink.href = `/download/${nomeArquivo}`;
                                 downloadContainer.classList.remove('hidden');
@@ -153,7 +148,7 @@ async def pagina_inicial():
                                 statusTexto.innerText = "Erro interno na compactação: " + statusDados.resultado.erro;
                             }
                         }
-                    }, 1200); // Executa ciclos de verificação rápidos a cada 1.2 segundos
+                    }, 1200); 
                     
                 } catch (erro) {
                     spinner.classList.add('hidden');
@@ -162,7 +157,6 @@ async def pagina_inicial():
                 }
             });
 
-            // Gerencia o clique no botão de download para limpar o estado de tela após a entrega do arquivo
             document.getElementById('downloadLink').addEventListener('click', () => {
                 const statusTexto = document.getElementById('statusTexto');
                 const downloadContainer = document.getElementById('downloadContainer');
@@ -182,7 +176,6 @@ async def pagina_inicial():
 
 @app.post("/upload")
 async def upload_pdf(arquivo: UploadFile = File(...)):
-    # Validação rigorosa de extensão em nível de API
     ext = arquivo.filename.split(".")[-1].lower()
     if ext != "pdf":
         raise HTTPException(status_code=400, detail="Formato inválido. Apenas arquivos .pdf são suportados.")
@@ -190,11 +183,9 @@ async def upload_pdf(arquivo: UploadFile = File(...)):
     id_unico = str(uuid.uuid4())
     caminho_entrada = os.path.join(UPLOAD_DIR, f"{id_unico}.pdf")
     
-    # Salva o binário recebido no volume persistente compartilhado
     with open(caminho_entrada, "wb") as buffer:
         buffer.write(await arquivo.read())
     
-    # Dispara a tarefa assíncrona na fila do Celery
     tarefa = processar_pdf.delay(caminho_entrada)
     
     return {"id_tarefa": tarefa.id, "status": "Processando"}
