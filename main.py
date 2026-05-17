@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from worker import processar_pdf
@@ -34,10 +34,10 @@ async def forcar_download_e_limpar(filename: str, background_tasks: BackgroundTa
     if not os.path.exists(caminho_completo):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado ou já deletado.")
     
-    # Agenda a exclusão do arquivo
+    # Agenda a exclusão do arquivo para rodar IMEDIATAMENTE após a resposta ser entregue ao cliente
     background_tasks.add_task(deletar_arquivo_servidor, caminho_completo)
     
-    # Retorna o arquivo forçando o download
+    # Retorna o arquivo forçando o download nativo do navegador
     return FileResponse(
         path=caminho_completo,
         filename=nome_seguro,
@@ -52,18 +52,27 @@ async def pagina_inicial():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Fábrica de PDFs - Compactador Automático</title>
+        <title>Fábrica de PDFs - Compactador Profissional</title>
         <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     </head>
     <body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex items-center justify-center p-4">
         <div class="max-w-md w-full bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
             <h1 class="text-3xl font-bold text-center mb-2 bg-gradient-to-r from-red-400 to-orange-500 bg-clip-text text-transparent">Fábrica de PDFs</h1>
-            <p class="text-slate-400 text-center text-sm mb-8">Reduza o tamanho dos seus arquivos PDF instantaneamente usando filas assíncronas.</p>
+            <p class="text-slate-400 text-center text-sm mb-8">Reduza o tamanho dos seus arquivos PDF de verdade usando compressão de imagens por inteligência gráfica.</p>
             
             <form id="uploadForm" class="space-y-6">
                 <div>
                     <label class="block text-sm font-medium mb-2">Selecione o Arquivo PDF</label>
                     <input type="file" id="arquivo" name="arquivo" accept=".pdf" required class="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-red-500 file:text-slate-900 hover:file:bg-red-400 cursor-pointer bg-slate-900 p-3 rounded-xl border border-slate-700">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2">Nível de Compressão</label>
+                    <select id="nivel" name="nivel" class="w-full bg-slate-900 p-3 rounded-xl border border-slate-700 text-slate-200 focus:outline-none focus:border-red-500">
+                        <option value="screen">Alta Compressão (Qualidade de Tela - Arquivo super leve)</option>
+                        <option value="ebook" selected>Compressão Média (Qualidade de E-book - Recomendado)</option>
+                        <option value="printer">Baixa Compressão (Qualidade de Impressão - Mantém nitidez alta)</option>
+                    </select>
                 </div>
                 
                 <button type="submit" class="w-full bg-gradient-to-r from-red-500 to-orange-600 text-slate-900 font-bold py-3 px-4 rounded-xl hover:from-red-400 hover:to-orange-500 transition duration-200 shadow-lg cursor-pointer">
@@ -114,6 +123,7 @@ async def pagina_inicial():
                 
                 const formData = new FormData();
                 formData.append('arquivo', document.getElementById('arquivo').files[0]);
+                formData.append('nivel', document.getElementById('nivel').value);
                 
                 try {
                     const resposta = await fetch('/upload', { method: 'POST', body: formData });
@@ -124,7 +134,7 @@ async def pagina_inicial():
                     }
                     
                     const idTarefa = dados.id_tarefa;
-                    statusTexto.innerText = "PDF recebido com sucesso! Compactando streams de dados...";
+                    statusTexto.innerText = "PDF recebido! Executando algoritmos avançados de amostragem gráfica...";
                     
                     if (checagemIntervalo) clearInterval(checagemIntervalo);
                     
@@ -138,7 +148,7 @@ async def pagina_inicial():
                             if (statusDados.resultado.sucesso) {
                                 spinner.classList.add('hidden');
                                 successCheck.classList.remove('hidden');
-                                statusTexto.innerText = "Sucesso! O tamanho do PDF foi reduzido.";
+                                statusTexto.innerText = "Sucesso! O tamanho do seu PDF foi reduzido com eficiência.";
                                 
                                 const nomeArquivo = statusDados.resultado.url_download.split('/').pop();
                                 downloadLink.href = `/download/${nomeArquivo}`;
@@ -175,7 +185,7 @@ async def pagina_inicial():
     return HTMLResponse(content=html_content, status_code=200)
 
 @app.post("/upload")
-async def upload_pdf(arquivo: UploadFile = File(...)):
+async def upload_pdf(arquivo: UploadFile = File(...), nivel: str = Form("ebook")):
     ext = arquivo.filename.split(".")[-1].lower()
     if ext != "pdf":
         raise HTTPException(status_code=400, detail="Formato inválido. Apenas arquivos .pdf são suportados.")
@@ -186,7 +196,8 @@ async def upload_pdf(arquivo: UploadFile = File(...)):
     with open(caminho_entrada, "wb") as buffer:
         buffer.write(await arquivo.read())
     
-    tarefa = processar_pdf.delay(caminho_entrada)
+    # Repassa o nível de compressão escolhido pelo usuário para a fila do Celery
+    tarefa = processar_pdf.delay(caminho_entrada, nivel)
     
     return {"id_tarefa": tarefa.id, "status": "Processando"}
 
