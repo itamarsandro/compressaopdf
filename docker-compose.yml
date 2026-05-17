@@ -1,11 +1,4 @@
 services:
-  api-web:
-    build: .
-    command: uvicorn main:app --host 0.0.0.0 --port 80
-    expose:
-      - "80"
-    environment:
-      - REDIS_URL=redis://fila-redis:6379/0services:
   api-pdf:
     build: .
     command: uvicorn main:app --host 0.0.0.0 --port 80
@@ -31,29 +24,6 @@ services:
       - dados_pdfs:/app/uploads
 
   redis-pdf:
-    image: redis:alpine
-    restart: always
-
-volumes:
-  dados_pdfs:
-    restart: always
-    depends_on:
-      - fila-redis
-    volumes:
-      - dados_pdfs:/app/uploads
-
-  processador-worker:
-    build: .
-    command: celery -A worker.app_celery worker --loglevel=info
-    environment:
-      - REDIS_URL=redis://fila-redis:6379/0
-    restart: always
-    depends_on:
-      - fila-redis
-    volumes:
-      - dados_pdfs:/app/uploads
-
-  fila-redis:
     image: redis:alpine
     restart: always
 
